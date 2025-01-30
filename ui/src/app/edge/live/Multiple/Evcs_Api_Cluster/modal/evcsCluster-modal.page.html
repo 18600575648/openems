@@ -1,6 +1,7 @@
 <ng-container *ngIf="(edge.currentData | async)['channel'] as currentData">
     <ion-header>
-        <ion-toolbar class="ion-justify-content-center" color="primary">
+        <ion-toolbar class="ion-justify-content-center"
+            style="--background: var(--ion-color-toolbar-primary); color: var(--ion-title-color);">
             <ion-title>
                 <ion-label *ngIf="config.properties.alias as alias">
                     {{ alias }}
@@ -161,9 +162,9 @@
 
                                                                 <ion-segment-button value="FORCE_CHARGE">
                                                                     <ion-item lines="none">
-                                                                        <ion-img style="width:30px"
-                                                                            src="assets/img/gridStorage.png">
-                                                                        </ion-img>
+                                                                        <ion-icon style="width:30px"
+                                                                            name="oe-grid-storage">
+                                                                        </ion-icon>
                                                                         <ion-label translate>
                                                                             General.Manually
                                                                         </ion-label>
