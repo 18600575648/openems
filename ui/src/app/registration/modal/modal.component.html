@@ -3,18 +3,18 @@
         <ion-title translate>Register.title</ion-title>
         <ion-buttons slot="end">
             <ion-button (click)="modalCtrl.dismiss()">
-                <ion-icon name="close-outline"></ion-icon>
+                <ion-icon name="close-outline" style="color: var(--ion-title-color);"></ion-icon>
             </ion-button>
         </ion-buttons>
     </ion-toolbar>
 </ion-header>
 
 <ion-segment [(ngModel)]="activeSegment" (ionChange)="updateRegistrationForm($event)">
-    <ion-segment-button value="owner">
-        <ion-label translate>Register.segment.user</ion-label>
-    </ion-segment-button>
     <ion-segment-button value="installer">
         <ion-label translate>Register.segment.installer</ion-label>
+    </ion-segment-button>
+    <ion-segment-button value="owner">
+        <ion-label translate>Register.segment.user</ion-label>
     </ion-segment-button>
 </ion-segment>
 
