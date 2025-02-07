@@ -7,10 +7,8 @@ import org.osgi.annotation.versioning.ProviderType;
 import io.openems.common.channel.AccessMode;
 import io.openems.common.channel.PersistencePriority;
 import io.openems.common.channel.Unit;
+import io.openems.common.types.MeterType;
 import io.openems.common.types.OpenemsType;
-import io.openems.common.utils.IntUtils;
-import io.openems.common.utils.IntUtils.Round;
-import io.openems.edge.common.channel.Channel;
 import io.openems.edge.common.channel.Doc;
 import io.openems.edge.common.channel.IntegerDoc;
 import io.openems.edge.common.channel.IntegerReadChannel;
@@ -23,7 +21,7 @@ import io.openems.edge.common.type.TypeUtils;
 
 /**
  * Represents an electricity Meter.
- * 
+ *
  * <p>
  * Meaning of positive and negative values for Power and Current depends on the
  * {@link MeterType} (via {@link #getMeterType()}):
@@ -54,7 +52,7 @@ import io.openems.edge.common.type.TypeUtils;
  * <li>negative: (undefined)
  * </ul>
  * </ul>
- * 
+ *
  * <p>
  * If values for all phases are equal (i.e. the measured device is 'symmetric'),
  * consider using the helper methods:
@@ -62,12 +60,14 @@ import io.openems.edge.common.type.TypeUtils;
  * <li>{@link #calculateSumActivePowerFromPhases(ElectricityMeter)}
  * <li>{@link #calculateSumReactivePowerFromPhases(ElectricityMeter)}
  * <li>{@link #calculatePhasesFromActivePower(ElectricityMeter)}
+ * <li>{@link #calculatePhasesFromVoltage(ElectricityMeter)}
  * <li>{@link #calculatePhasesFromReactivePower(ElectricityMeter)}
+ * <li>{@link #calculateCurrentsFromActivePowerAndVoltage(ElectricityMeter)}
  * <li>{@link #calculateSumActiveProductionEnergyFromPhases(ElectricityMeter)}
  * <li>{@link #calculateAverageVoltageFromPhases(ElectricityMeter)}
  * <li>{@link #calculateSumCurrentFromPhases(ElectricityMeter)}
  * </ul>
- * 
+ *
  * <p>
  * If only ever L1, L2 or L3 can be set, implement the {@link SinglePhaseMeter}
  * Nature additionally and consider using its helper methods.
@@ -76,12 +76,6 @@ import io.openems.edge.common.type.TypeUtils;
 public interface ElectricityMeter extends OpenemsComponent {
 
 	public enum ChannelId implements io.openems.edge.common.channel.ChannelId {
-		MIN_ACTIVE_POWER(Doc.of(OpenemsType.INTEGER) //
-				.unit(Unit.WATT)),
-
-		MAX_ACTIVE_POWER(Doc.of(OpenemsType.INTEGER) //
-				.unit(Unit.WATT)),
-
 		/**
 		 * Active Power.
 		 *
@@ -93,39 +87,7 @@ public interface ElectricityMeter extends OpenemsComponent {
 		 */
 		ACTIVE_POWER(new IntegerDoc() //
 				.unit(Unit.WATT) //
-				.persistencePriority(PersistencePriority.HIGH) //
-				.onInit(channel -> {
-					channel.onSetNextValue(value -> {
-						/*
-						 * Fill Min/Max Active Power channels
-						 */
-						if (value.isDefined()) {
-							int newValue = value.get();
-							{
-								Channel<Integer> minActivePowerChannel = channel.getComponent()
-										.channel(ChannelId.MIN_ACTIVE_POWER);
-								int minActivePower = minActivePowerChannel.value().orElse(0);
-								int minNextActivePower = minActivePowerChannel.getNextValue().orElse(0);
-								if (newValue < Math.min(minActivePower, minNextActivePower)) {
-									// avoid getting called too often -> round to 100
-									newValue = IntUtils.roundToPrecision(newValue, Round.TOWARDS_ZERO, 100);
-									minActivePowerChannel.setNextValue(newValue);
-								}
-							}
-							{
-								Channel<Integer> maxActivePowerChannel = channel.getComponent()
-										.channel(ChannelId.MAX_ACTIVE_POWER);
-								int maxActivePower = maxActivePowerChannel.value().orElse(0);
-								int maxNextActivePower = maxActivePowerChannel.getNextValue().orElse(0);
-								if (newValue > Math.max(maxActivePower, maxNextActivePower)) {
-									// avoid getting called too often -> round to 100
-									newValue = IntUtils.roundToPrecision(newValue, Round.AWAY_FROM_ZERO, 100);
-									maxActivePowerChannel.setNextValue(newValue);
-								}
-							}
-						}
-					});
-				})), //
+				.persistencePriority(PersistencePriority.HIGH)), //
 
 		/**
 		 * Active Power L1.
@@ -327,7 +289,7 @@ public interface ElectricityMeter extends OpenemsComponent {
 		 * </ul>
 		 */
 		ACTIVE_PRODUCTION_ENERGY(Doc.of(OpenemsType.LONG) //
-				.unit(Unit.WATT_HOURS) //
+				.unit(Unit.CUMULATED_WATT_HOURS) //
 				.persistencePriority(PersistencePriority.HIGH)),
 		/**
 		 * The ActiveProductionEnergy on L1.
@@ -341,7 +303,7 @@ public interface ElectricityMeter extends OpenemsComponent {
 		 * </ul>
 		 */
 		ACTIVE_PRODUCTION_ENERGY_L1(Doc.of(OpenemsType.LONG) //
-				.unit(Unit.WATT_HOURS) //
+				.unit(Unit.CUMULATED_WATT_HOURS) //
 				.persistencePriority(PersistencePriority.HIGH)),
 		/**
 		 * The ActiveProductionEnergy on L2.
@@ -355,7 +317,7 @@ public interface ElectricityMeter extends OpenemsComponent {
 		 * </ul>
 		 */
 		ACTIVE_PRODUCTION_ENERGY_L2(Doc.of(OpenemsType.LONG) //
-				.unit(Unit.WATT_HOURS) //
+				.unit(Unit.CUMULATED_WATT_HOURS) //
 				.persistencePriority(PersistencePriority.HIGH)),
 		/**
 		 * The ActiveProductionEnergy on L3.
@@ -369,7 +331,7 @@ public interface ElectricityMeter extends OpenemsComponent {
 		 * </ul>
 		 */
 		ACTIVE_PRODUCTION_ENERGY_L3(Doc.of(OpenemsType.LONG) //
-				.unit(Unit.WATT_HOURS) //
+				.unit(Unit.CUMULATED_WATT_HOURS) //
 				.persistencePriority(PersistencePriority.HIGH)),
 		/**
 		 * Active Consumption Energy.
@@ -383,7 +345,7 @@ public interface ElectricityMeter extends OpenemsComponent {
 		 * </ul>
 		 */
 		ACTIVE_CONSUMPTION_ENERGY(Doc.of(OpenemsType.LONG) //
-				.unit(Unit.WATT_HOURS) //
+				.unit(Unit.CUMULATED_WATT_HOURS) //
 				.persistencePriority(PersistencePriority.HIGH)),
 		/**
 		 * The ActiveConsumptionEnergy on L1.
@@ -397,7 +359,7 @@ public interface ElectricityMeter extends OpenemsComponent {
 		 * </ul>
 		 */
 		ACTIVE_CONSUMPTION_ENERGY_L1(Doc.of(OpenemsType.LONG) //
-				.unit(Unit.WATT_HOURS) //
+				.unit(Unit.CUMULATED_WATT_HOURS) //
 				.persistencePriority(PersistencePriority.HIGH)),
 		/**
 		 * The ActiveConsumptionEnergy on L2.
@@ -411,7 +373,7 @@ public interface ElectricityMeter extends OpenemsComponent {
 		 * </ul>
 		 */
 		ACTIVE_CONSUMPTION_ENERGY_L2(Doc.of(OpenemsType.LONG) //
-				.unit(Unit.WATT_HOURS) //
+				.unit(Unit.CUMULATED_WATT_HOURS) //
 				.persistencePriority(PersistencePriority.HIGH)),
 		/**
 		 * The ActiveConsumptionEnergy on L3.
@@ -425,7 +387,7 @@ public interface ElectricityMeter extends OpenemsComponent {
 		 * </ul>
 		 */
 		ACTIVE_CONSUMPTION_ENERGY_L3(Doc.of(OpenemsType.LONG) //
-				.unit(Unit.WATT_HOURS) //
+				.unit(Unit.CUMULATED_WATT_HOURS) //
 				.persistencePriority(PersistencePriority.HIGH)),; //
 
 		private final Doc doc;
@@ -449,10 +411,10 @@ public interface ElectricityMeter extends OpenemsComponent {
 
 	/**
 	 * Is this device actively managed by OpenEMS?.
-	 * 
+	 *
 	 * <p>
 	 * If this is a normal electricity meter, return false.
-	 * 
+	 *
 	 * <p>
 	 * If this is an actively managed device like a heat-pump or electric vehicle
 	 * charging station, return true. The value will then get ignored for
@@ -474,8 +436,7 @@ public interface ElectricityMeter extends OpenemsComponent {
 	public static ModbusSlaveNatureTable getModbusSlaveNatureTable(AccessMode accessMode) {
 		return ModbusSlaveNatureTable.of(ElectricityMeter.class, accessMode, 200) //
 				.channel(0, ChannelId.FREQUENCY, ModbusType.FLOAT32) //
-				.channel(2, ChannelId.MIN_ACTIVE_POWER, ModbusType.FLOAT32) //
-				.channel(4, ChannelId.MAX_ACTIVE_POWER, ModbusType.FLOAT32) //
+				.uint32Reserved(2).uint32Reserved(4) //
 				.channel(6, ChannelId.ACTIVE_POWER, ModbusType.FLOAT32) //
 				.channel(8, ChannelId.REACTIVE_POWER, ModbusType.FLOAT32) //
 				.channel(10, ChannelId.ACTIVE_PRODUCTION_ENERGY, ModbusType.FLOAT32) //
@@ -519,7 +480,7 @@ public interface ElectricityMeter extends OpenemsComponent {
 	/**
 	 * Used for Modbus/TCP Api Controller. Provides a Modbus table for the Channels
 	 * of this Component - without individual phases.
-	 * 
+	 *
 	 * <p>
 	 * This method provides a way to stay compatible with previous SymmetricMeter
 	 * implementations that did not support AsymmetricMeter. Do not use for new
@@ -531,8 +492,7 @@ public interface ElectricityMeter extends OpenemsComponent {
 	public static ModbusSlaveNatureTable getModbusSlaveNatureTableWithoutIndividualPhases(AccessMode accessMode) {
 		return ModbusSlaveNatureTable.of(ElectricityMeter.class, accessMode, 200) //
 				.channel(0, ChannelId.FREQUENCY, ModbusType.FLOAT32) //
-				.channel(2, ChannelId.MIN_ACTIVE_POWER, ModbusType.FLOAT32) //
-				.channel(4, ChannelId.MAX_ACTIVE_POWER, ModbusType.FLOAT32) //
+				.uint32Reserved(2).uint32Reserved(4) //
 				.channel(6, ChannelId.ACTIVE_POWER, ModbusType.FLOAT32) //
 				.channel(8, ChannelId.REACTIVE_POWER, ModbusType.FLOAT32) //
 				.channel(10, ChannelId.ACTIVE_PRODUCTION_ENERGY, ModbusType.FLOAT32) //
@@ -540,84 +500,6 @@ public interface ElectricityMeter extends OpenemsComponent {
 				.channel(14, ChannelId.VOLTAGE, ModbusType.FLOAT32) //
 				.channel(16, ChannelId.CURRENT, ModbusType.FLOAT32) //
 				.build();
-	}
-
-	/**
-	 * Gets the Channel for {@link ChannelId#MIN_ACTIVE_POWER}.
-	 *
-	 * @return the Channel
-	 */
-	public default IntegerReadChannel getMinActivePowerChannel() {
-		return this.channel(ChannelId.MIN_ACTIVE_POWER);
-	}
-
-	/**
-	 * Gets the Minimum Ever Active Power in [W]. See
-	 * {@link ChannelId#MIN_ACTIVE_POWER}.
-	 *
-	 * @return the Channel {@link Value}
-	 */
-	public default Value<Integer> getMinActivePower() {
-		return this.getMinActivePowerChannel().value();
-	}
-
-	/**
-	 * Internal method to set the 'nextValue' on {@link ChannelId#MIN_ACTIVE_POWER}
-	 * Channel.
-	 *
-	 * @param value the next value
-	 */
-	public default void _setMinActivePower(Integer value) {
-		this.getMinActivePowerChannel().setNextValue(value);
-	}
-
-	/**
-	 * Internal method to set the 'nextValue' on {@link ChannelId#MIN_ACTIVE_POWER}
-	 * Channel.
-	 *
-	 * @param value the next value
-	 */
-	public default void _setMinActivePower(int value) {
-		this.getMinActivePowerChannel().setNextValue(value);
-	}
-
-	/**
-	 * Gets the Channel for {@link ChannelId#MAX_ACTIVE_POWER}.
-	 *
-	 * @return the Channel
-	 */
-	public default IntegerReadChannel getMaxActivePowerChannel() {
-		return this.channel(ChannelId.MAX_ACTIVE_POWER);
-	}
-
-	/**
-	 * Gets the Maximum Ever Active Power in [W]. See
-	 * {@link ChannelId#MAX_ACTIVE_POWER}.
-	 *
-	 * @return the Channel {@link Value}
-	 */
-	public default Value<Integer> getMaxActivePower() {
-		return this.getMaxActivePowerChannel().value();
-	}
-
-	/**
-	 * Internal method to set the 'nextValue' on {@link ChannelId#MAX_ACTIVE_POWER}
-	 * Channel.
-	 *
-	 * @param value the next value
-	 */
-	public default void _setMaxActivePower(Integer value) {
-		this.getMaxActivePowerChannel().setNextValue(value);
-	}
-
-	/**
-	 * Internal method to set the 'nextValue' on {@link ChannelId#MAX_ACTIVE_POWER}
-	 * Channel.
-	 *
-	 * @param value the next value
-	 */
-	public default void _setMaxActivePower(int value) {
-		this.getMaxActivePowerChannel().setNextValue(value);
 	}
 
 	/**
@@ -1678,9 +1560,9 @@ public interface ElectricityMeter extends OpenemsComponent {
 	public static void calculateSumActiveProductionEnergyFromPhases(ElectricityMeter meter) {
 		final Consumer<Value<Long>> calculate = ignore -> {
 			meter._setActiveProductionEnergy(TypeUtils.sum(//
-					meter.getActivePowerL1Channel().getNextValue().get(), //
-					meter.getActivePowerL2Channel().getNextValue().get(), //
-					meter.getActivePowerL3Channel().getNextValue().get())); //
+					meter.getActiveProductionEnergyL1Channel().getNextValue().get(), //
+					meter.getActiveProductionEnergyL2Channel().getNextValue().get(), //
+					meter.getActiveProductionEnergyL3Channel().getNextValue().get())); //
 		};
 		meter.getActiveProductionEnergyL1Channel().onSetNextValue(calculate);
 		meter.getActiveProductionEnergyL2Channel().onSetNextValue(calculate);
@@ -1689,7 +1571,7 @@ public interface ElectricityMeter extends OpenemsComponent {
 
 	/**
 	 * Initializes Channel listeners for a Symmetric {@link ElectricityMeter}.
-	 * 
+	 *
 	 * <p>
 	 * Calculate the {@link ChannelId#ACTIVE_POWER_L1},
 	 * {@link ChannelId#ACTIVE_POWER_L2} and
@@ -1709,7 +1591,68 @@ public interface ElectricityMeter extends OpenemsComponent {
 
 	/**
 	 * Initializes Channel listeners for a Symmetric {@link ElectricityMeter}.
+	 *
+	 * <p>
+	 * Calculate the {@link ChannelId#VOLTAGE_L1}, {@link ChannelId#VOLTAGE_L2} and
+	 * {@link ChannelId#VOLTAGE_L3}-Channels as a copy of the
+	 * {@link ChannelId#VOLTAGE}-Channel.
+	 *
+	 * @param meter the {@link ElectricityMeter}
+	 */
+	public static void calculatePhasesFromVoltage(ElectricityMeter meter) {
+		meter.getVoltageChannel().onSetNextValue(value -> {
+			meter.getVoltageL1Channel().setNextValue(value.get());
+			meter.getVoltageL2Channel().setNextValue(value.get());
+			meter.getVoltageL3Channel().setNextValue(value.get());
+		});
+	}
+
+	/**
+	 * Initializes Channel listeners for a Symmetric {@link ElectricityMeter}.
+	 *
+	 * <p>
+	 * Calculates
+	 * <ul>
+	 * <li>{@link ChannelId#CURRENT_L1} based on {@link ChannelId#ACTIVE_POWER_L1}
+	 * and {@link ChannelId#VOLTAGE_L1}.
+	 * <li>{@link ChannelId#CURRENT_L2} based on {@link ChannelId#ACTIVE_POWER_L2}
+	 * and {@link ChannelId#VOLTAGE_L2}.
+	 * <li>{@link ChannelId#CURRENT_L3} based on {@link ChannelId#ACTIVE_POWER_L3}
+	 * and {@link ChannelId#VOLTAGE_L3}.
+	 * </ul>
+	 *
+	 * @param meter the {@link ElectricityMeter}
+	 */
+	public static void calculateCurrentsFromActivePowerAndVoltage(ElectricityMeter meter) {
+		meter.getActivePowerL1Channel().onSetNextValue(value -> {
+			meter._setCurrentL1(currentFromActivePowerAndVoltage(value.get(), meter.getVoltageL1().get()));
+		});
+		meter.getActivePowerL2Channel().onSetNextValue(value -> {
+			meter._setCurrentL2(currentFromActivePowerAndVoltage(value.get(), meter.getVoltageL2().get()));
+		});
+		meter.getActivePowerL3Channel().onSetNextValue(value -> {
+			meter._setCurrentL3(currentFromActivePowerAndVoltage(value.get(), meter.getVoltageL3().get()));
+		});
+	}
+
+	/**
+	 * Calculates Current (in [mA]) from ActivePower (in [W]) and Voltage (in [mV]).
 	 * 
+	 * @param power   the power
+	 * @param voltage the voltage
+	 * @return the current or null if power or voltage or null
+	 */
+	private static Integer currentFromActivePowerAndVoltage(Integer power, Integer voltage) {
+		if (power == null || voltage == null) {
+			return null;
+		}
+		// somewhat complicated computation, but prevents integer overflows
+		return (power * 1000 /* [mW] */) / (voltage / 1000 /* [V] */);
+	}
+
+	/**
+	 * Initializes Channel listeners for a Symmetric {@link ElectricityMeter}.
+	 *
 	 * <p>
 	 * Calculate the {@link ChannelId#REACTIVE_POWER_L1},
 	 * {@link ChannelId#REACTIVE_POWER_L2} and
@@ -1723,7 +1666,7 @@ public interface ElectricityMeter extends OpenemsComponent {
 			var phase = TypeUtils.divide(value.get(), 3);
 			meter.getReactivePowerL1Channel().setNextValue(phase);
 			meter.getReactivePowerL2Channel().setNextValue(phase);
-			meter.getReactivePowerL2Channel().setNextValue(phase);
+			meter.getReactivePowerL3Channel().setNextValue(phase);
 		});
 	}
 
