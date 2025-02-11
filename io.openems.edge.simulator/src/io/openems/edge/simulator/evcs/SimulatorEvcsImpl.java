@@ -17,18 +17,16 @@ import org.osgi.service.event.propertytypes.EventTopics;
 import org.osgi.service.metatype.annotations.Designate;
 
 import io.openems.common.exceptions.OpenemsException;
-import io.openems.edge.common.channel.LongReadChannel;
-import io.openems.edge.common.channel.value.Value;
+import io.openems.common.types.MeterType;
 import io.openems.edge.common.component.OpenemsComponent;
 import io.openems.edge.common.event.EdgeEventConstants;
-import io.openems.edge.common.type.TypeUtils;
 import io.openems.edge.evcs.api.AbstractManagedEvcsComponent;
 import io.openems.edge.evcs.api.Evcs;
 import io.openems.edge.evcs.api.EvcsPower;
 import io.openems.edge.evcs.api.ManagedEvcs;
+import io.openems.edge.evcs.api.PhaseRotation;
 import io.openems.edge.evcs.api.Status;
 import io.openems.edge.meter.api.ElectricityMeter;
-import io.openems.edge.meter.api.MeterType;
 
 @Designate(ocd = Config.class, factory = true)
 @Component(//
@@ -41,7 +39,7 @@ import io.openems.edge.meter.api.MeterType;
 		EdgeEventConstants.TOPIC_CYCLE_EXECUTE_WRITE, //
 })
 public class SimulatorEvcsImpl extends AbstractManagedEvcsComponent
-		implements SimulatorEvcs, ElectricityMeter, ManagedEvcs, Evcs, OpenemsComponent, EventHandler {
+		implements SimulatorEvcs, ManagedEvcs, Evcs, ElectricityMeter, OpenemsComponent, EventHandler {
 
 	@Reference
 	private EvcsPower evcsPower;
@@ -54,9 +52,9 @@ public class SimulatorEvcsImpl extends AbstractManagedEvcsComponent
 	public SimulatorEvcsImpl() {
 		super(//
 				OpenemsComponent.ChannelId.values(), //
+				ElectricityMeter.ChannelId.values(), //
 				ManagedEvcs.ChannelId.values(), //
 				Evcs.ChannelId.values(), //
-				ElectricityMeter.ChannelId.values(), //
 				SimulatorEvcs.ChannelId.values() //
 		);
 	}
@@ -97,22 +95,18 @@ public class SimulatorEvcsImpl extends AbstractManagedEvcsComponent
 
 	private void updateChannels() {
 		int chargePowerLimit = this.getSetChargePowerLimit().orElse(0);
-		this._setChargePower(chargePowerLimit);
+		this._setActivePower(chargePowerLimit);
 
 		/*
 		 * Set Simulated "meter" Active Power
 		 */
 		this._setActivePower(chargePowerLimit);
-		var simulatedActivePowerByThree = TypeUtils.divide(chargePowerLimit, 3);
-		this._setActivePowerL1(simulatedActivePowerByThree);
-		this._setActivePowerL2(simulatedActivePowerByThree);
-		this._setActivePowerL3(simulatedActivePowerByThree);
 
 		/*
 		 * Set calculated energy
 		 */
 		var timeDiff = ChronoUnit.MILLIS.between(this.lastUpdate, LocalDateTime.now());
-		var energyTransfered = timeDiff / 1000.0 / 60.0 / 60.0 * this.getChargePower().orElse(0);
+		var energyTransfered = timeDiff / 1000.0 / 60.0 / 60.0 * this.getActivePower().orElse(0);
 
 		this.exactEnergySession = this.exactEnergySession + energyTransfered;
 		this._setEnergySession((int) this.exactEnergySession);
@@ -121,8 +115,19 @@ public class SimulatorEvcsImpl extends AbstractManagedEvcsComponent
 	}
 
 	@Override
+	public MeterType getMeterType() {
+		return MeterType.MANAGED_CONSUMPTION_METERED;
+	}
+
+	@Override
+	public PhaseRotation getPhaseRotation() {
+		// TODO implement handling for rotated Phases
+		return PhaseRotation.L1_L2_L3;
+	}
+
+	@Override
 	public String debugLog() {
-		return this.getChargePower().asString();
+		return this.getActivePower().asString();
 	}
 
 	@Override
@@ -148,7 +153,7 @@ public class SimulatorEvcsImpl extends AbstractManagedEvcsComponent
 	@Override
 	public boolean applyChargePowerLimit(int power) throws OpenemsException {
 		this._setSetChargePowerLimit(power);
-		this._setChargePower(power);
+		this._setActivePower(power);
 		this._setStatus(power > 0 ? Status.CHARGING : Status.CHARGING_REJECTED);
 		return true;
 	}
@@ -166,30 +171,5 @@ public class SimulatorEvcsImpl extends AbstractManagedEvcsComponent
 	@Override
 	public boolean applyDisplayText(String text) throws OpenemsException {
 		return false;
-	}
-
-	@Override
-	public MeterType getMeterType() {
-		return MeterType.CONSUMPTION_METERED;
-	}
-
-	@Override
-	public void _setActiveConsumptionEnergy(Long value) {
-		ElectricityMeter.super._setActiveConsumptionEnergy(value);
-	}
-
-	@Override
-	public void _setActiveConsumptionEnergy(long value) {
-		ElectricityMeter.super._setActiveConsumptionEnergy(value);
-	}
-
-	@Override
-	public LongReadChannel getActiveConsumptionEnergyChannel() {
-		return ElectricityMeter.super.getActiveConsumptionEnergyChannel();
-	}
-
-	@Override
-	public Value<Long> getActiveConsumptionEnergy() {
-		return ElectricityMeter.super.getActiveConsumptionEnergy();
 	}
 }
